@@ -16,8 +16,8 @@ app.get("/auth/callback", async (req, res) => {
     const code = req.query.code;
 
     // Aqui você vai trocar pelo SEU client_id e client_secret do Spotify
-    const clientId = "SEU_CLIENT_ID";
-    const clientSecret = "SEU_CLIENT_SECRET";
+    const clientId = "60ab076afd944916a7f485391181d278";
+    const clientSecret = "22b5ad15dfa24baba7afc7696524b2c5";
 
     const tokenResponse = await axios.post("https://accounts.spotify.com/api/token", null, {
         params: {
