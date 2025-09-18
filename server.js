@@ -1,80 +1,101 @@
 const express = require("express");
-const fetch = require("node-fetch"); // npm install node-fetch@2
+const request = require("request");
 const cors = require("cors");
 
 const app = express();
 app.use(cors());
-app.use(express.json());
 
-const clientId = "60ab076afd944916a7f485391181d278"; // seu Client ID
-const clientSecret = "22b5ad15dfa24baba7afc7696524b2c5"; // seu Client Secret
-const redirectUri = "https://spotify-server-00k8.onrender.com/auth/callback";
+const client_id = process.env.CLIENT_ID;
+const client_secret = process.env.CLIENT_SECRET;
+const redirect_uri = process.env.REDIRECT_URI || "https://spotify-server-00k8.onrender.com/auth/callback";
 
-// Armazenamento simples de tokens por jogador (apenas para teste)
-const tokens = {};
+// Map para armazenar tokens por usuário Roblox
+let userTokens = {};
 
-// Rota inicial
+// Rota inicial só pra teste
 app.get("/", (req, res) => {
-    res.send("Servidor do Spotify está rodando!");
+    res.send("Servidor do Spotify rodando ✅");
+});
+
+// Login - redireciona para o Spotify
+app.get("/login/:userid", (req, res) => {
+    const scope = "user-read-currently-playing";
+    const state = req.params.userid;
+
+    const authUrl = "https://accounts.spotify.com/authorize?" +
+        new URLSearchParams({
+            response_type: "code",
+            client_id: client_id,
+            scope: scope,
+            redirect_uri: redirect_uri,
+            state: state
+        }).toString();
+
+    res.redirect(authUrl);
 });
 
 // Callback do Spotify
-app.get("/auth/callback", async (req, res) => {
-    const code = req.query.code;
-    const playerId = req.query.playerId; // você envia o UserId do Roblox no link
+app.get("/auth/callback", (req, res) => {
+    const code = req.query.code || null;
+    const state = req.query.state || null;
 
-    if (!code || !playerId) return res.send("Faltando code ou playerId");
+    if (!code || !state) {
+        return res.send("Erro: nenhum code ou state recebido.");
+    }
 
-    // Troca code por access token
-    const body = new URLSearchParams({
-        grant_type: "authorization_code",
-        code: code,
-        redirect_uri: redirectUri,
-    });
-
-    const response = await fetch("https://accounts.spotify.com/api/token", {
-        method: "POST",
-        headers: {
-            "Authorization": "Basic " + Buffer.from(`${clientId}:${clientSecret}`).toString("base64"),
-            "Content-Type": "application/x-www-form-urlencoded",
+    const authOptions = {
+        url: "https://accounts.spotify.com/api/token",
+        form: {
+            code: code,
+            redirect_uri: redirect_uri,
+            grant_type: "authorization_code"
         },
-        body: body.toString(),
-    });
+        headers: {
+            "Authorization": "Basic " + Buffer.from(client_id + ":" + client_secret).toString("base64")
+        },
+        json: true
+    };
 
-    const data = await response.json();
-    if (data.error) return res.send(`Erro: ${data.error}`);
-
-    tokens[playerId] = data.access_token;
-    res.send("Autorização concluída! Pode voltar ao jogo.");
-});
-
-// Rota para Roblox consultar música
-app.get("/currently-playing/:playerId", async (req, res) => {
-    const playerId = req.params.playerId;
-    const token = tokens[playerId];
-    if (!token) return res.json({ error: "Jogador não logado" });
-
-    const response = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (response.status === 204) return res.json({ error: "Nenhuma música tocando" });
-
-    const data = await response.json();
-    if (!data.item) return res.json({ error: "Nenhuma música tocando" });
-
-    res.json({
-        song: data.item.name,
-        artist: data.item.artists.map(a => a.name).join(", "),
-        album: data.item.album.name,
-        image: data.item.album.images[0].url,
-        progress_ms: data.progress_ms,
-        duration_ms: data.item.duration_ms,
+    request.post(authOptions, (error, response, body) => {
+        if (!error && response.statusCode === 200) {
+            userTokens[state] = body;
+            res.send("Spotify conectado! Agora volte para o Roblox.");
+        } else {
+            console.error(body);
+            res.send("Erro ao autenticar com o Spotify.");
+        }
     });
 });
 
-// Inicia servidor
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-    console.log(`Servidor do Spotify rodando na porta ${port}`);
+// Rota para pegar música atual
+app.get("/currently-playing/:userid", (req, res) => {
+    const userid = req.params.userid;
+    const tokens = userTokens[userid];
+
+    if (!tokens) {
+        return res.json({ error: "Usuário não autenticado." });
+    }
+
+    const options = {
+        url: "https://api.spotify.com/v1/me/player/currently-playing",
+        headers: { "Authorization": "Bearer " + tokens.access_token },
+        json: true
+    };
+
+    request.get(options, (error, response, body) => {
+        if (!error && response.statusCode === 200 && body && body.item) {
+            res.json({
+                song: body.item.name,
+                artist: body.item.artists.map(a => a.name).join(", "),
+                image: body.item.album.images[0].url
+            });
+        } else {
+            res.json({ song: "Nenhuma música tocando" });
+        }
+    });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log("Servidor rodando na porta " + PORT);
 });
