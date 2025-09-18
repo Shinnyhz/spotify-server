@@ -1,3 +1,4 @@
+// server.js
 const express = require("express");
 const request = require("request");
 const cors = require("cors");
@@ -9,15 +10,15 @@ const client_id = process.env.CLIENT_ID;
 const client_secret = process.env.CLIENT_SECRET;
 const redirect_uri = process.env.REDIRECT_URI || "https://spotify-server-00k8.onrender.com/auth/callback";
 
-// Map para armazenar tokens por usuário Roblox
+// Armazena tokens por Roblox UserId
 let userTokens = {};
 
-// Rota inicial só pra teste
+// Rota raiz para teste
 app.get("/", (req, res) => {
-    res.send("Servidor do Spotify rodando ✅");
+    res.send("Servidor Spotify rodando ✅");
 });
 
-// Login - redireciona para o Spotify
+// Rota de login (Redireciona para Spotify)
 app.get("/login/:userid", (req, res) => {
     const scope = "user-read-currently-playing";
     const state = req.params.userid;
@@ -43,6 +44,7 @@ app.get("/auth/callback", (req, res) => {
         return res.send("Erro: nenhum code ou state recebido.");
     }
 
+    // Troca code por access_token
     const authOptions = {
         url: "https://accounts.spotify.com/api/token",
         form: {
@@ -58,16 +60,17 @@ app.get("/auth/callback", (req, res) => {
 
     request.post(authOptions, (error, response, body) => {
         if (!error && response.statusCode === 200) {
+            // Salva tokens na memória com Roblox UserId
             userTokens[state] = body;
             res.send("Spotify conectado! Agora volte para o Roblox.");
         } else {
             console.error(body);
-            res.send("Erro ao autenticar com o Spotify.");
+            res.send("Erro ao autenticar com Spotify.");
         }
     });
 });
 
-// Rota para pegar música atual
+// Rota para retornar música atual
 app.get("/currently-playing/:userid", (req, res) => {
     const userid = req.params.userid;
     const tokens = userTokens[userid];
