@@ -23,7 +23,7 @@ app.get("/auth/callback", async (req, res) => {
         params: {
             grant_type: "authorization_code",
             code: code,
-            redirect_uri: "https://seuservidor.onrender.com/auth/callback",
+            redirect_uri: "https://spotify-server-00k8.onrender.com/auth/callback",
             client_id: clientId,
             client_secret: clientSecret
         },
